@@ -1,0 +1,21 @@
+
+dbt_cloud:
+  target: dev
+  outputs:
+    dev:
+      type: snowflake
+      account: wd03530.us-central1.gcp
+      user: mtulow
+      password: Lightspeed1!
+      role: ACCOUNTADMIN
+      warehouse: INGESTION_WH
+      database: NYC_TAXI
+      schema: PUBLIC
+      threads: 200
+      authenticator: externalbrowser
+      
+
+  target: dev
+
+config:
+  surrogate_key_treat_nulls_as_empty_strings: True
