@@ -51,15 +51,24 @@ with DAG(default_args=default_args, schedule='') as dag:
 
         # transform service data task
         transform_task = PythonOperator(
-            task_id=f'extract_{service}_data_task',
+            task_id=f'transform_{service}_data_task',
+            python_callable=transform_data,
+        )
+
+        # load service data to s3, snowflake & postgres task
+        upload_to_s3_task = PythonOperator(
+            task_id=f'load_{service}_data_to_s3_task',
+            python_callable=extract_data,
+        )
+        upload_to_snowflake_task = PythonOperator(
+            task_id=f'load_{service}_data_to_snowflake_task',
+            python_callable=extract_data,
+        )
+        upload_to_postgres_task = PythonOperator(
+            task_id=f'load_{service}_data_to_postgres_task',
             python_callable=extract_data,
         )
 
-        # load service data task
-        load_task = PythonOperator(
-            task_id=f'load_{service}_data_task',
-            python_callable=extract_data,
-        )
 
-        extract_task >> transform_task >> load_task
+        extract_task >> transform_task >> [upload_to_s3_task, upload_to_snowflake_task, upload_to_postgres_task]
 
