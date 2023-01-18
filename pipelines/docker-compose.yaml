@@ -274,5 +274,14 @@ services:
       airflow-init:
         condition: service_completed_successfully
 
+  pgadmin:
+    image: dpage/pgadmin4
+    environment:
+      - PGADMIN_DEFAULT_EMAIL=admin@admin.com
+      - PGADMIN_DEFAULT_PASSWORD=root
+    ports:
+      - "8080:80"
+    
+    
 volumes:
   postgres-db-volume:
