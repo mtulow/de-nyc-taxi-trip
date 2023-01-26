@@ -3,37 +3,12 @@
 # =======
 
 import itertools
-import os, wget, time, shutil
+import os
+import wget, time, shutil
 import pandas as pd
 from sqlalchemy import create_engine
-
-# %%
-# Utility Functions
-# =================
-
-def get_url(service: str, year: int, month: int):
-    return f'https://d37ci6vzurychx.cloudfront.net/trip-data/{service}_tripdata_{year}-{month:02d}.parquet'
-
-def get_filepath(service: str, year: int, month: int, ext: str=None):
-    # Default file extension
-    ext = ext or 'parquet'
-    # Data directory
-    datadir = f'data/{service}/{year}/{month:02d}'
-    # Create data directory
-    os.makedirs(datadir, exist_ok=True)
-    return f'{datadir}/{service}_tripdata_{year}-{month:02d}.{ext}'
-
-def get_s3_bucket_name(service: str, year: int, month: int, bucket_name: str):
-    return f's3://{bucket_name}/data/{service}/{year}/{month:02d}'
-
-def get_snowflake_stagename(service: str, year: int, month: int, stage_name: str):
-    return 
-
-def get_snowflake_stagepath(service: str, year: int, month: int, stage_name: str):
-    return 
-
-def get_tablename(service: str, year: int, month: int):
-    return f'{service}_tripdata_{year}_{month:02d}'
+import elt_utilities as utils
+import connect
 
 # %%
 # Extract
@@ -45,25 +20,39 @@ def download_data(url: str, filepath: str):
         return True
     return False
 
+
+def fetch_data(dataset_url: str, service: str)-> pd.DataFrame:
+    df = pd.read_parquet(dataset_url)
+    df.rename_axis(columns=column_mapper(service), inplace=True)
+    return df
+
+
 # %%
 # Transform
 # =========
 
-# TODO: write transform functions
+def column_mapper(service: str)-> dict:
+    if service == 'yellow':
+        mapper = dict([
+                ('VendorID','vendorid'),('RatecodeID','ratecodeid'),
+                ('PULocationID','pickup_locationid'),('DOLocationID','dropoff_locationid'),
+                ('tpep_pickup_datetime','pickup_datetime'),('tpep_dropoff_datetime','dropoff_datetime'),
+        ])
+    elif service == 'green':
+        mapper = dict([
+                ('VendorID','vendorid'),('RatecodeID','ratecodeid'),
+                ('PULocationID','pickup_locationid'),('DOLocationID','dropoff_locationid'),
+                ('lpep_pickup_datetime','pickup_datetime'),('lpep_dropoff_datetime','dropoff_datetime'),
+        ])
+    else:
+        mapper = dict()
+        
+    return mapper
+
 
 # %%
 # Load
 # ====
-
-def connect_to_postgres():
-    user = os.getenv('PG_USER')
-    password = os.getenv('PG_PASSWORD')
-    host = os.getenv('PG_HOST')
-    port = os.getenv('PG_PORT')
-    dbname = os.getenv('PG_DATABASE')
-
-    uri = f'postgresql://{user}:{password}@{host}:{port}/{dbname}'
-    return create_engine(uri)
 
 def ingest_parquet_file(filename: str, tablename: str):
     df = pd.read_parquet(filename)
@@ -109,13 +98,15 @@ def elt_pipeline(start_year: int=2021, end_year: int=2021, bucket_name: str='de-
         for year, month, service in itertools.product(range(start_year, end_year+1), range(1,12+1), services):
             try:
                 # Pipeline Args
-                url = get_url(service, year, month)
-                filename = get_filepath(service, year, month, 'parquet')
-                tablename = get_tablename(service, year, month)
+                url = utils.URLs.s3_url(service, year, month)
+                # filename = utils.get_filepath(service, year, month, 'parquet')
+                # tablename = utils.get_tablename(service, year, month)
 
                 # EXTRACT
                 print('\n', ' Extract '.center(90,'='), '\n')
                 print('', f'Downloading file `{os.path.basename(url)}` ...')
+                fetch_data(dataset_url=url)
+                print('Done!')
                 download_data(url, filename)
 
                 # TRANSFORM

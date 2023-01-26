@@ -1,10 +1,8 @@
 import os
-import elt
+import nyc_taxi_elt.elt as elt
 import datetime as dt
 
-from airflow import DAG
-from airflow.operators.python import PythonOperator, BranchPythonOperator
-from airflow.operators.bash import BashOperator
+from prefect import flow, task
 
 
 def extract_data(**kwargs):
