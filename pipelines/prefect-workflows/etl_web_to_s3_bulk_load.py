@@ -7,7 +7,9 @@ from prefect import flow, task
 from prefect_aws.s3 import S3Bucket
 from sqlalchemy import create_engine
 
-
+# %%
+# Utility Functions
+# =================
 
 def get_column_names(service: str):
     if service == 'yellow':
@@ -20,6 +22,10 @@ def get_column_names(service: str):
         raise
     return dict(zip(old,new))
     
+
+# %%
+# Extract Tasks
+# =============
 
 @task(retries=3, retry_delay_seconds=5)
 def fetch_data(dataset_url: str) -> pd.DataFrame:
@@ -34,6 +40,9 @@ def download_data(dataset_url: str, filepath: str):
     print()
     return
 
+# %%
+# Tranform Tasks
+# ==============
 
 @task(log_prints=True, retries=3, retry_delay_seconds=5)
 def rename_columns(src_filepath: str, service: str, dst_filepath: str=None) -> str:
@@ -45,6 +54,11 @@ def rename_columns(src_filepath: str, service: str, dst_filepath: str=None) -> s
     print(f'{dst_filepath} columns:\n', '\n '.join(df.columns.tolist()))
     df.to_parquet(dst_filepath, compression='gzip')
     return dst_filepath
+
+
+# %%
+# Load Tasks
+# ==========
 
 @task(retries=3, retry_delay_seconds=5)
 def upload_to_s3(src_filepath: str, dst_filepath: str=None):
@@ -80,9 +94,17 @@ def copy_into_redshift(s3_file: str, tablename: str):
 
     return data
 
+# %%
+# Cleanup Tasks
+# =============
+
 @task
 def cleanup_data_directory(datadir: str='data'):
     shutil.rmtree(datadir, ignore_errors=True)
+
+# %%
+# ETL Workflows
+# =============
 
 @flow
 def etl_to_local(service: str, year: int, month: int):
@@ -104,9 +126,6 @@ def etl_to_local(service: str, year: int, month: int):
     print()
 
     rename_columns(raw_file, service, local_file)
-    
-    
-
 
 
 @flow

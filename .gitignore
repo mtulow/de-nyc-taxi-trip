@@ -133,3 +133,6 @@ dmypy.json
 *.terraform*
 *.tfstate
 *.tfstate.*
+
+# Data Directory
+pipelines/data/

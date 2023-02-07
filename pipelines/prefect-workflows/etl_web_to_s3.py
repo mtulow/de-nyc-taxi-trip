@@ -1,3 +1,7 @@
+# %%
+# Imports
+# =======
+
 import os
 import time
 import shutil
@@ -8,6 +12,9 @@ from prefect_aws.s3 import S3Bucket
 from sqlalchemy import create_engine
 
 
+# %%
+# Utility Functions
+# =================
 
 def get_column_names(service: str):
     if service == 'yellow':
@@ -20,6 +27,10 @@ def get_column_names(service: str):
         raise
     return dict(zip(old,new))
     
+
+# %%
+# Extract Tasks
+# =============
 
 @task(retries=3, retry_delay_seconds=5)
 def fetch_data(dataset_url: str) -> pd.DataFrame:
@@ -34,6 +45,9 @@ def download_data(dataset_url: str, filepath: str):
     print()
     return
 
+# %%
+# Tranform Tasks
+# ==============
 
 @task(log_prints=True, retries=3, retry_delay_seconds=5)
 def rename_columns(src_filepath: str, service: str, dst_filepath: str=None) -> str:
@@ -46,15 +60,18 @@ def rename_columns(src_filepath: str, service: str, dst_filepath: str=None) -> s
     df.to_parquet(dst_filepath, compression='gzip')
     return dst_filepath
 
+
+# %%
+# Load Tasks
+# ==========
+
 @task(retries=3, retry_delay_seconds=5)
 def upload_to_s3(src_filepath: str, dst_filepath: str=None):
     # default destination file
     dst_filepath = dst_filepath or src_filepath
     # connect to S3 Bucket
     os.system(f'aws s3 mv {src_filepath} "s3://{dst_filepath}"')
-    # s3_bucket = S3Bucket.load("de-nyc-taxi-datalake")
-    # s3_bucket.upload_from_path(src_filepath, os.path.dirname(dst_filepath))
-
+    
 
 @task
 def copy_into_redshift(s3_file: str, tablename: str):
@@ -80,9 +97,17 @@ def copy_into_redshift(s3_file: str, tablename: str):
 
     return data
 
+# %%
+# Cleanup Tasks
+# =============
+
 @task
 def cleanup_data_directory(datadir: str='data'):
     shutil.rmtree(datadir, ignore_errors=True)
+
+# %%
+# ETL Workflows
+# =============
 
 @flow
 def etl_to_local(service: str, year: int, month: int):
@@ -104,13 +129,10 @@ def etl_to_local(service: str, year: int, month: int):
     print()
 
     rename_columns(raw_file, service, local_file)
-    
-    
-
 
 
 @flow
-def etl_web_to_aws(service: str, year: int, month: int, s3_bucket_name: str='nyc-taxi-datalake'):
+def etl_web_to_s3(service: str, year: int, month: int, s3_bucket_name: str='nyc-taxi-datalake'):
     # Args
     url_prefix = f'https://d37ci6vzurychx.cloudfront.net/trip-data'
     
@@ -140,11 +162,6 @@ def etl_web_to_aws(service: str, year: int, month: int, s3_bucket_name: str='nyc
     
     # copy_into_redshift(s3_file, tablename)
 
-@flow
-def local_to_s3(prefix: str, s3_bucket_name: str='nyc-taxi-datalake'):
-    datadir = f'{s3_bucket_name}/{prefix}'
-    print(f'\nUploading Data Directory:\t{datadir}')
-    os.system(f'aws s3 mv "{datadir}/" "s3://{datadir}/"')
 
 
 @flow
@@ -153,53 +170,18 @@ def run_aws_etl_workflow_v1(start_year: int, end_year: int, services: list[str]=
         for month in range(start_month, end_month+1):    
             for service in services:
                 print(f'Running ETL Subflow w/ Args:\t({service}, {year}, {month:02d})')
-                etl_web_to_aws(service, year, month)
+                etl_web_to_s3(service, year, month)
                 print()
-
-    cleanup_data_directory()
-
-
-@flow
-def run_aws_etl_workflow_v2(start_year: int, end_year: int, services: list[str]=['yellow','green'], *, start_month: int=1, end_month: int=12):
-    for service in services:
-        print(f'Running Subflow for {service}')
-
-        for year in range(start_year,end_year+1):
-            for month in range(start_month, end_month+1):
-                print()
-                etl_to_local(service, year, month)
-            
-        local_to_s3(prefix=f'data/{service}/{year}', s3_bucket_name='nyc-taxi-datalake')
-            
-            # print(f'Running ETL for args:\t({year}, {month:02d})')
-            # for service in services:
-            #     print(f'Running Subflow for {service}')
-            #     elt_to_local(service, year, month)
-            #     etl_web_to_aws(service, year, month)
-            # print()
 
     cleanup_data_directory()
 
 
 def main():
     t0 = time.perf_counter()
-    run_aws_etl_workflow_v1(2020, 2020, ['yellow', 'green'])
+    run_aws_etl_workflow(2020, 2020, ['yellow', 'green'])
     t1 = time.perf_counter()
-    v1_total_time = t1-t0
     
-    print()
-    os.system(f'aws s3 rm "s3://nyc-taxi-datalake/data/yellow"')
-    print()
-    os.system(f'aws s3 rm "s3://nyc-taxi-datalake/data/green"')
-    print()
-    
-    t0 = time.perf_counter()
-    run_aws_etl_workflow_v2(2020, 2020, ['yellow', 'green'])
-    t1 = time.perf_counter()
-    v2_total_time = t1-t0
-
-    print(f'version 1 total time:', v1_total_time)
-    print(f'version 2 total time:', v2_total_time)
+    print(f'{run_aws_etl_workflow.__name__} total time:', t1-t0)
     
 
 if __name__ == '__main__':
